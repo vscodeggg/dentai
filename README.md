@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # CLI_dental
 # CLI Dentist — Voice-to-Text Prototype
 
@@ -862,3 +863,6 @@ chunks, and `pytest`'s cache directory.
 One rule (`* text=auto`) that tells Git to normalize line endings
 automatically for text files, so the same file doesn't show as
 all-changed just because it was edited on Windows vs. macOS/Linux.
+=======
+# dentai
+>>>>>>> 94c555bc501390cbff6559f36e542a9e4cfad75a
