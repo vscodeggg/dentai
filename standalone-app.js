@@ -685,7 +685,7 @@ function ToothChart({ findings = [], perioRecords = {}, selectedTooth, onSelectT
 }
 
 // Voice Engine & Simulator Controller
-function VoiceController({ isListening, onToggleListening, onSpeechInput }) {
+function VoiceController({ isListening, onToggleListening, onSpeechInput, isPythonRecording, recordCountdown, onRecordPythonMic, backendStatus }) {
   const [activeScenarioId, setActiveScenarioId] = useState(null);
   const recognitionRef = useRef(null);
 
@@ -751,10 +751,10 @@ function VoiceController({ isListening, onToggleListening, onSpeechInput }) {
           {isListening ? (
             <>
               <span className="status-indicator-dot"></span>
-              Live Dictation Active
+              Live Dictation Active (Browser Mic)
             </>
           ) : (
-            'Microphone Standby (Click to Speak)'
+            'Browser Mic Standby (Click to Speak)'
           )}
         </div>
 
@@ -762,13 +762,48 @@ function VoiceController({ isListening, onToggleListening, onSpeechInput }) {
           {Array.from({ length: 22 }).map((_, i) => (
             <div
               key={i}
-              className={`waveform-bar ${isListening ? 'active' : ''}`}
+              className={`waveform-bar ${isListening || isPythonRecording ? 'active' : ''}`}
               style={{
                 animationDelay: `${(i % 5) * 0.18}s`,
-                height: isListening ? `${8 + ((i * 7) % 20)}px` : '4px'
+                height: (isListening || isPythonRecording) ? `${8 + ((i * 7) % 20)}px` : '4px'
               }}
             />
           ))}
+        </div>
+
+        {/* Python Backend Mic Trigger */}
+        <div style={{ marginTop: '0.9rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.45rem' }}>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={onRecordPythonMic}
+            disabled={isPythonRecording}
+            style={{
+              width: '92%',
+              padding: '0.65rem 1rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              borderRadius: '999px',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              background: isPythonRecording ? 'linear-gradient(135deg, #ef4444, #dc2626)' : 'linear-gradient(135deg, #06b6d4, #0284c7)',
+              boxShadow: isPythonRecording ? '0 0 20px rgba(239, 68, 68, 0.6)' : '0 4px 14px rgba(6, 182, 212, 0.3)',
+              cursor: isPythonRecording ? 'wait' : 'pointer'
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+            {isPythonRecording ? `Recording... ${recordCountdown}s (Whisper Processing)` : '🎙️ Record with Python Mic (Whisper)'}
+          </button>
+          <div style={{ fontSize: '0.72rem', color: backendStatus?.online ? '#10b981' : '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: backendStatus?.online ? '#10b981' : '#f59e0b' }}></span>
+            {backendStatus?.online ? `Python AI Engine: ${backendStatus.chat_model}` : 'Connecting to Python backend...'}
+          </div>
         </div>
       </div>
 
@@ -1464,8 +1499,54 @@ function PatientSelector({ isOpen, currentPatient, onSelectPatient, onClose }) {
   );
 }
 
+// Python AI Backend Live Terminal Console Drawer
+function PythonTerminalDrawer({ isOpen, onClose, logs = [] }) {
+  if (!isOpen) return null;
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: '820px', width: '92%' }}>
+        <div className="modal-header" style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.8rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <span style={{ fontSize: '1.3rem' }}>🖥️</span>
+            <div>
+              <h3 className="modal-title" style={{ margin: 0, fontSize: '1.05rem', color: '#38bdf8' }}>Python AI Live Terminal & Event Stream</h3>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Direct feed from Python CLI_dental backend (MicrophoneRecorder, Whisper, LLM)</span>
+            </div>
+          </div>
+          <button className="modal-close-btn" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body" style={{ background: '#090d16', padding: '1rem', borderRadius: 'var(--radius-md)', margin: '1rem 0', maxHeight: '440px', overflowY: 'auto', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8rem', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+          {logs && logs.length > 0 ? (
+            logs.map((l, i) => (
+              <div key={i} style={{ padding: '3px 0', borderBottom: '1px solid rgba(255,255,255,0.03)', display: 'flex', gap: '0.75rem', alignItems: 'baseline' }}>
+                <span style={{ color: '#64748b', fontSize: '0.75rem' }}>[{l.time}]</span>
+                <span style={{
+                  color: l.category === 'mic' ? '#38bdf8' : l.category === 'ai' ? '#34d399' : l.category === 'error' ? '#f87171' : l.category === 'warning' ? '#fbbf24' : '#e2e8f0',
+                  fontWeight: 700,
+                  fontSize: '0.75rem'
+                }}>
+                  [{l.category.toUpperCase()}]
+                </span>
+                <span style={{ color: '#f1f5f9', wordBreak: 'break-word', lineHeight: 1.4 }}>{l.message}</span>
+              </div>
+            ))
+          ) : (
+            <div style={{ textAlign: 'center', color: '#64748b', padding: '2.5rem' }}>
+              No backend logs received yet. Click "Record with Python Mic" or run dictation.
+            </div>
+          )}
+        </div>
+        <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Live polling active (every 2.5s)</span>
+          <button className="btn-secondary" onClick={onClose}>Close Console</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Global Header
-function Header({ activeView, onNavigate, isListening, candidateCount, currentPatient }) {
+function Header({ activeView, onNavigate, isListening, candidateCount, currentPatient, backendStatus, onToggleLogs, logsCount }) {
   const [elapsed, setElapsed] = useState(160);
   useEffect(() => {
     const t = setInterval(() => setElapsed(s => s + 1), 1000);
@@ -1509,10 +1590,25 @@ function Header({ activeView, onNavigate, isListening, candidateCount, currentPa
         <div style={{ fontSize: '0.75rem', fontFamily: 'JetBrains Mono', color: 'var(--text-secondary)' }}>
           Exam Time: <strong style={{ color: 'var(--text-primary)' }}>{formatTimer(elapsed)}</strong>
         </div>
-        <div className="engine-status-pill">
-          <span className="status-indicator-dot"></span>
-          <span>Context-Engine Active</span>
+
+        {/* Python Backend Status Pill */}
+        <div
+          className="engine-status-pill"
+          onClick={onToggleLogs}
+          title="Click to view Python live console output"
+          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.35rem 0.75rem', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '999px', background: 'rgba(15,23,42,0.6)' }}
+        >
+          <span className="status-indicator-dot" style={{ backgroundColor: backendStatus?.online ? '#10b981' : '#f59e0b', boxShadow: backendStatus?.online ? '0 0 8px #10b981' : 'none' }}></span>
+          <span style={{ fontWeight: 600, fontSize: '0.75rem' }}>
+            {backendStatus?.online ? 'Python AI Engine Active' : 'Connecting to Python...'}
+          </span>
+          {logsCount > 0 && (
+            <span style={{ background: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8', fontSize: '0.65rem', padding: '1px 5px', borderRadius: '999px', fontFamily: 'JetBrains Mono' }}>
+              🖥️ {logsCount}
+            </span>
+          )}
         </div>
+
         <div className="doctor-pill">
           <div className="doctor-avatar">SL</div>
           <span>Dr. Sarah Lin, DDS</span>
@@ -1530,7 +1626,7 @@ function App() {
   const [perioRecords, setPerioRecords] = useState(INITIAL_PATIENTS[0].perioMeasurements || {});
   const [isListening, setIsListening] = useState(false);
   const [transcripts, setTranscripts] = useState([
-    { text: "Voice engine online. Baseline chart loaded for Marcus Vance.", timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+    { text: "Python voice engine online. Baseline chart loaded for Marcus Vance.", timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
   ]);
   const [candidateFindings, setCandidateFindings] = useState([]);
   const [activeView, setActiveView] = useState('charting');
@@ -1540,10 +1636,55 @@ function App() {
   const [approvedAt, setApprovedAt] = useState(null);
   const [toast, setToast] = useState(null);
 
+  // Python backend integration state
+  const [backendStatus, setBackendStatus] = useState({ online: false, chat_model: 'Detecting...', whisper_model: 'whisper-large-v3-turbo' });
+  const [isPythonRecording, setIsPythonRecording] = useState(false);
+  const [recordCountdown, setRecordCountdown] = useState(0);
+  const [serverLogs, setServerLogs] = useState([]);
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3800);
   };
+
+  // Poll Python backend status & logs
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const r = await fetch('/api/status');
+        if (r.ok) {
+          const d = await r.json();
+          setBackendStatus({ online: true, ...d });
+        } else {
+          setBackendStatus(s => ({ ...s, online: false }));
+        }
+      } catch (e) {
+        setBackendStatus(s => ({ ...s, online: false }));
+      }
+    };
+
+    const fetchLogs = async () => {
+      try {
+        const r = await fetch('/api/logs');
+        if (r.ok) {
+          const d = await r.json();
+          setServerLogs(d.logs || []);
+        }
+      } catch (e) {}
+    };
+
+    fetchStatus();
+    fetchLogs();
+
+    const statusInterval = setInterval(fetchStatus, 5000);
+    const logsInterval = setInterval(fetchLogs, 2500);
+
+    return () => {
+      clearInterval(statusInterval);
+      clearInterval(logsInterval);
+    };
+  }, []);
 
   const handleSelectPatient = (p) => {
     setCurrentPatient(p);
@@ -1556,10 +1697,56 @@ function App() {
     showToast(`Loaded patient: ${p.name}`);
   };
 
-  const handleSpeechInput = useCallback((rawText) => {
+  const handleSpeechInput = useCallback(async (rawText) => {
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     setTranscripts(prev => [...prev, { text: rawText, timestamp }]);
 
+    // Asynchronously call Python backend for real Groq LLM parsing
+    try {
+      const resp = await fetch('/api/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: rawText, recent: candidateFindings })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.findings && data.findings.length > 0) {
+          const pyFindings = data.findings.map(f => {
+            const toothNum = parseInt(f.tooth_number, 10);
+            const tooth = TEETH_DATA.find(t => t.id === toothNum);
+            const surf = f.surface && f.surface !== 'unspecified' ? f.surface.toUpperCase().split('') : [];
+            const conditionKey = f.finding_type.includes('pocket') ? 'perio_pocket' :
+              f.finding_type.includes('caries') || f.finding_type.includes('decay') || f.finding_type.includes('cavity') ? 'caries' :
+              f.finding_type.includes('crown') ? 'crown' :
+              f.finding_type.includes('composite') ? 'composite_restoration' :
+              f.finding_type.includes('missing') ? 'missing' : 'caries';
+
+            return {
+              id: 'cand-py-' + Math.random().toString(36).substr(2, 6),
+              toothId: toothNum || 14,
+              toothName: tooth?.shortName || `Tooth #${toothNum}`,
+              condition: conditionKey,
+              conditionLabel: CONDITIONS[conditionKey]?.label || f.finding_type,
+              surfaces: surf,
+              confidence: f.needs_review ? 0.68 : 0.98,
+              sourceText: rawText,
+              clinicalNote: f.notes || f.display_value || 'Extracted via Python DentalAI',
+              perio: f.finding_type.includes('pocket') ? { depths: [parseInt(f.value || '5', 10), 4, 4], bleeding: false } : null,
+              ambiguity: f.needs_review ? { isAmbiguous: true, reason: 'Flagged by DentalAI for clinician review' } : { isAmbiguous: false },
+              pyFinding: f
+            };
+          });
+
+          setCandidateFindings(prev => [...pyFindings, ...prev]);
+          showToast(`⚡ DentalAI extracted ${pyFindings.length} finding(s) with Groq`);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("Python backend parse fallback:", err);
+    }
+
+    // Fallback rule-based parsing
     const parsed = parseDentalSpeech(rawText, currentPatient);
     if (parsed) {
       setCandidateFindings(prev => [parsed, ...prev]);
@@ -1571,7 +1758,48 @@ function App() {
     } else {
       showToast(`Logged: "${rawText.substring(0, 25)}..."`);
     }
-  }, [currentPatient]);
+  }, [currentPatient, candidateFindings]);
+
+  // Record audio using the Python physical microphone recorder (sounddevice + Groq Whisper)
+  const handleRecordPythonMic = async () => {
+    if (isPythonRecording) return;
+    setIsPythonRecording(true);
+    setRecordCountdown(5);
+    showToast("🎙️ Python Microphone recording 5s chunk...");
+
+    const countdownTimer = setInterval(() => {
+      setRecordCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(countdownTimer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    try {
+      const resp = await fetch('/api/record-mic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seconds: 5 })
+      });
+      const data = await resp.json();
+      if (data.success && data.transcript) {
+        showToast(`✓ Whisper: "${data.transcript}"`);
+        handleSpeechInput(data.transcript);
+      } else if (data.success) {
+        showToast("No clear speech detected in chunk.");
+      } else {
+        showToast(`Mic error: ${data.error || 'Failed'}`);
+      }
+    } catch (err) {
+      showToast(`Python mic error: ${err.message}`);
+    } finally {
+      clearInterval(countdownTimer);
+      setIsPythonRecording(false);
+      setRecordCountdown(0);
+    }
+  };
 
   const handleAcceptFinding = (cand) => {
     setConfirmedFindings(prev => {
@@ -1641,7 +1869,7 @@ function App() {
     showToast(`Chart locked and clinically approved by Dr. Lin at ${stamp}`);
   };
 
-  const handleDispatchReport = (ch) => {
+  const handleDispatchReport = async (ch) => {
     if (ch === 'portal') {
       showToast(`Dispatched to HealthVault Patient Portal for ${currentPatient.name}`);
     } else {
@@ -1657,6 +1885,9 @@ function App() {
         isListening={isListening}
         candidateCount={candidateFindings.length}
         currentPatient={currentPatient}
+        backendStatus={backendStatus}
+        onToggleLogs={() => setIsTerminalOpen(true)}
+        logsCount={serverLogs.length}
       />
 
       <div className="patient-bar">
@@ -1700,6 +1931,10 @@ function App() {
               isListening={isListening}
               onToggleListening={() => setIsListening(prev => !prev)}
               onSpeechInput={handleSpeechInput}
+              isPythonRecording={isPythonRecording}
+              recordCountdown={recordCountdown}
+              onRecordPythonMic={handleRecordPythonMic}
+              backendStatus={backendStatus}
             />
             <LiveTranscript transcripts={transcripts} />
             <ReviewQueue
@@ -1762,6 +1997,12 @@ function App() {
         onClose={() => setIsPatientModalOpen(false)}
       />
 
+      <PythonTerminalDrawer
+        isOpen={isTerminalOpen}
+        onClose={() => setIsTerminalOpen(false)}
+        logs={serverLogs}
+      />
+
       {toast && (
         <div className="toast-notification">
           <span>{toast}</span>
@@ -1775,3 +2016,4 @@ function App() {
 const rootElement = document.getElementById('root');
 const root = ReactDOM.createRoot(rootElement);
 root.render(<App />);
+
