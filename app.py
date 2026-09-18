@@ -85,8 +85,14 @@ def is_silent(audio, threshold=200):
 
 
 def main():
+    if "--web" in sys.argv or "--interface" in sys.argv:
+        from server import run_server
+        run_server(port=3000, open_browser=True)
+        return
+
     client = get_client()
-    print("Voice-to-transcript running. Speak naturally. Press Ctrl+C to stop.\n")
+    print("Voice-to-transcript running. Speak naturally. Press Ctrl+C to stop.")
+    print("Tip: Run 'python server.py' or 'python app.py --web' to run with the interactive 32-tooth web interface.\n")
 
     full_transcript = []
 
